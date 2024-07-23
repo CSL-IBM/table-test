@@ -50,30 +50,31 @@ def create_sqlite_table_from_df(df, table_name='transactions'):
     return conn
 
 def call_watsonx_api(query, table_name, columns):
+    # QUERY 생성
     QUERY = f"""
     <</SYS>>
 
     [INST]
     To ensure the generated SQL queries follow best practices for SQLite, please adhere to the following guidelines:
     1. **Identify the Table and Columns**:
-       - Ensure the table being queried is `transactions`.
-       - Use the provided columns for querying.
+       - Ensure the table being queried is `{table_name}`.
+       - Use the provided columns `{columns}` for querying.
 
     2. **Filter by Specific Conditions**:
        - Apply the `WHERE` clause for filtering based on specific conditions such as Collector or category.
        - Example: To filter transactions for 'John' in the 'Green' category, use:
          ```sql
-         SELECT * FROM transactions WHERE Collector = 'John' AND category = 'Green';
-         ```    
+         SELECT * FROM {table_name} WHERE Collector = 'John' AND category = 'Green';
+         ```
 
     3. **Date Filtering and Grouping**:
        - Use `>=` and `<=` operators for date filtering.
          ```sql
-         SELECT * FROM transactions WHERE date >= '2023-01-01' AND date <= '2023-12-31';
+         SELECT * FROM {table_name} WHERE date >= '2023-01-01' AND date <= '2023-12-31';
          ```
        - To group by month, use `GROUP BY strftime('%m', date)`:
          ```sql
-         SELECT strftime('%m', date) AS month, COUNT(*) FROM transactions GROUP BY month;
+         SELECT strftime('%m', date) AS month, COUNT(*) FROM {table_name} GROUP BY month;
          ```
 
     4. **Query Execution**:
@@ -88,39 +89,42 @@ def call_watsonx_api(query, table_name, columns):
     [/INST]
     """
 
-response = llm(QUERY)
+    # LLM 응답 받기
+    response = llm(QUERY)
 
-# 응답을 텍스트 형식으로 파싱하여 필요한 정보를 추출
-sql_query = response.split("Response:")[1].split("---------------------- line break")[0].strip()
+    # 응답을 텍스트 형식으로 파싱하여 필요한 정보를 추출
+    sql_query = response.split("Response:")[1].split("---------------------- line break")[0].strip()
 
-# 가이드라인을 적용하여 SQL 쿼리 검토 및 조정
-def apply_guidelines(sql_query):
-    # 비-SQLite 문법 제거
-    sql_query = sql_query.replace('DATE_TRUNC', '')  # DATE_TRUNC 제거
-    sql_query = sql_query.replace('`', '')           # 백틱 제거
+    # 가이드라인을 적용하여 SQL 쿼리 검토 및 조정
+    def apply_guidelines(sql_query):
+        # 비-SQLite 문법 제거
+        sql_query = sql_query.replace('DATE_TRUNC', '')  # DATE_TRUNC 제거
+        sql_query = sql_query.replace('`', '')           # 백틱 제거
 
-    # 특정 조건에 따라 필터 추가
-    if 'Collector' in sql_query and 'category' in sql_query:
-        if 'date' in sql_query:
-            # 날짜 필터링이 >= 및 <= 연산자를 사용하는지 확인
-            sql_query = sql_query.replace('BETWEEN', '>=').replace('AND', 'AND').replace('TO', '<=')
+        # 특정 조건에 따라 필터 추가
+        if 'Collector' in sql_query and 'category' in sql_query:
+            if 'date' in sql_query:
+                # 날짜 필터링이 >= 및 <= 연산자를 사용하는지 확인
+                sql_query = sql_query.replace('BETWEEN', '>=').replace('AND', 'AND').replace('TO', '<=')
 
         # 월별 그룹화 확인 및 수정
         if 'GROUP BY' in sql_query:
             if 'strftime' not in sql_query:
                 sql_query = sql_query.replace('GROUP BY', 'GROUP BY strftime(\'%m\', date)')
 
-    return sql_query
+        return sql_query
 
-# 가이드라인을 적용하여 SQL 쿼리 수정
-sql_query = apply_guidelines(sql_query)
-return sql_query
+    # 가이드라인을 적용하여 SQL 쿼리 수정
+    sql_query = apply_guidelines(sql_query)
+    return sql_query
 
 def execute_sql_query(conn, query):
     try:
+        # SQL 쿼리를 실행하고 결과를 DataFrame으로 반환
         df = pd.read_sql_query(query, conn)
         return df
     except Exception as e:
+        # 오류가 발생한 경우 메시지 출력 및 빈 DataFrame 반환
         st.error(f"SQL query failed: {e}")
         return pd.DataFrame()
 
