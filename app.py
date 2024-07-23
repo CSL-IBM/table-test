@@ -57,6 +57,24 @@ if uploaded_file is not None:
 
     # 조건 추출 함수
     def extract_conditions(query):
+        conditions = {}
+        date_conditions = parse_date_conditions(query)
+        
+        # 문자열 조건 추출
+        for pattern in patterns.values():
+            if pattern in query:
+                column = next(col for col, pat in patterns.items() if pat == pattern)
+                try:
+                    value = re.split(r'이야|이고', query.split(pattern)[1].strip())[0].strip()
+                    if column in df.columns and column not in date_conditions:
+                        conditions[column] = value
+                except IndexError:
+                    st.warning(f"질문에서 '{column}'의 값을 추출할 수 없습니다.")
+        
+        return conditions, date_conditions
+
+    # 질문에 따른 필터링 함수
+    def filter_dataframe(query, df):
         # 필터링할 열과 값을 추출하는 정규 표현식 패턴 정의
         patterns = {
             CATEGORY: f"{CATEGORY}는",
@@ -71,39 +89,24 @@ if uploaded_file is not None:
             COLLECTOR: f"{COLLECTOR}는"
         }
         
-        conditions = {}
-        date_conditions = parse_date_conditions(query)
-        
-        # 조건 추출
-        for column, pattern in patterns.items():
-            if pattern in query:
-                try:
-                    value = re.split(r'이야|이고', query.split(pattern)[1].strip())[0].strip()
-                    if column in df.columns and column not in date_conditions:
-                        conditions[column] = value
-                except IndexError:
-                    st.warning(f"질문에서 '{column}'의 값을 추출할 수 없습니다.")
-        
-        return conditions, date_conditions
-
-    # 질문에 따른 필터링 함수
-    def filter_dataframe(query, df):
         conditions, date_conditions = extract_conditions(query)
         
         # 필터링
         filtered_df = df.copy()
         for column, value in conditions.items():
-            filtered_df = filtered_df[filtered_df[column].astype(str).str.strip() == value]
+            if column in filtered_df.columns:
+                filtered_df = filtered_df[filtered_df[column].astype(str).str.strip() == value]
         
         # 날짜 필터링
         for column, (condition_type, date_value) in date_conditions.items():
             date_value = datetime.strptime(date_value, '%Y-%m-%d')
-            if condition_type == 'after':
-                filtered_df = filtered_df[filtered_df[column].apply(pd.to_datetime, errors='coerce') > date_value]
-            elif condition_type == 'before':
-                filtered_df = filtered_df[filtered_df[column].apply(pd.to_datetime, errors='coerce') < date_value]
-            elif condition_type == 'on':
-                filtered_df = filtered_df[filtered_df[column].apply(pd.to_datetime, errors='coerce') == date_value]
+            if column in filtered_df.columns:
+                if condition_type == 'after':
+                    filtered_df = filtered_df[filtered_df[column].apply(pd.to_datetime, errors='coerce') > date_value]
+                elif condition_type == 'before':
+                    filtered_df = filtered_df[filtered_df[column].apply(pd.to_datetime, errors='coerce') < date_value]
+                elif condition_type == 'on':
+                    filtered_df = filtered_df[filtered_df[column].apply(pd.to_datetime, errors='coerce') == date_value]
         
         if filtered_df.empty:
             st.warning("조건에 맞는 데이터가 없습니다.")
