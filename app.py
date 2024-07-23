@@ -33,9 +33,9 @@ if uploaded_file is not None:
 
     # 질문에 따른 필터링 함수
     def filter_dataframe(query, df):
-        # 필터링할 열과 값을 추출하는 정규 표현식 패턴 정의
         import re
         
+        # 필터링할 열과 값을 추출하는 정규 표현식 패턴 정의
         patterns = {
             CATEGORY: f"{CATEGORY}는",
             CUSTOMER_NAME: f"{CUSTOMER_NAME}는",
@@ -49,13 +49,14 @@ if uploaded_file is not None:
             COLLECTOR: f"{COLLECTOR}는"
         }
         
-        # 조건을 저장할 딕셔너리
         conditions = {}
         
         for column, pattern in patterns.items():
             if pattern in query:
+                # 패턴에 따라 조건을 추출
                 try:
-                    value = query.split(pattern)[1].split("이야")[0].strip()
+                    # "이야"와 "이고"는 예시문에서 다를 수 있음
+                    value = re.split(r'이야|이고', query.split(pattern)[1].strip())[0].strip()
                     if column in df.columns:
                         conditions[column] = value
                 except IndexError:
@@ -64,7 +65,7 @@ if uploaded_file is not None:
         if conditions:
             filtered_df = df.copy()
             for column, value in conditions.items():
-                filtered_df = filtered_df[filtered_df[column] == value]
+                filtered_df = filtered_df[filtered_df[column].astype(str).str.strip() == value]
             return filtered_df
         
         st.warning("지원하지 않는 질문 형식입니다.")
