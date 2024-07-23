@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime
 
 # 페이지 제목
 st.title("CSV 파일 기반 질문 응답 시스템")
@@ -28,9 +29,29 @@ if uploaded_file is not None:
     st.write(f"'{CATEGORY}는 Red 이고, {COLLECTOR}는 John이야'")
     st.write(f"'{CUSTOMER_NAME}는 Alice 이고, {INVOICE_AMOUNT}는 5000이야'")
     st.write(f"'{INVOICE_DATE}는 2024-07-01 이고, {FORECAST_CODE}는 AUTO야'")
-    st.write(f"'{CATEGORY}는 Red'")  # 단일 조건 예시
+    st.write(f"'{DUE_DATE}가 2024-07-01 이후'")  # 날짜 조건 예시
 
     query = st.text_input("질문을 입력하세요:")
+
+    # 날짜 조건 처리 함수
+    def parse_date_condition(query):
+        date_conditions = {}
+        # 날짜 이후, 이전, 범위에 대한 패턴 정의
+        date_patterns = [
+            (r'(\w+)가 (\d{4}-\d{2}-\d{2}) 이후', 'after'),
+            (r'(\w+)가 (\d{4}-\d{2}-\d{2}) 이전', 'before'),
+            (r'(\w+)가 (\d{4}-\d{2}-\d{2})', 'on')
+        ]
+        
+        for pattern, condition_type in date_patterns:
+            match = re.search(pattern, query)
+            if match:
+                column = match.group(1)
+                date_value = match.group(2)
+                if column in [DUE_DATE, INVOICE_DATE, FORECAST_DATE]:  # 날짜 열만 필터링
+                    date_conditions[column] = (condition_type, date_value)
+        
+        return date_conditions
 
     # 질문에 따른 필터링 함수
     def filter_dataframe(query, df):
@@ -51,26 +72,37 @@ if uploaded_file is not None:
         }
         
         conditions = {}
+        date_conditions = parse_date_condition(query)
         
-        # 질문에서 조건 추출
+        # 조건 추출
         for column, pattern in patterns.items():
             if pattern in query:
                 try:
-                    # "이야"와 "이고"를 처리
                     value = re.split(r'이야|이고', query.split(pattern)[1].strip())[0].strip()
-                    if column in df.columns:
+                    if column in df.columns and column not in date_conditions:
                         conditions[column] = value
                 except IndexError:
                     st.warning(f"질문에서 '{column}'의 값을 추출할 수 없습니다.")
         
-        if conditions:
-            filtered_df = df.copy()
-            for column, value in conditions.items():
-                filtered_df = filtered_df[filtered_df[column].astype(str).str.strip() == value]
-            return filtered_df
+        # 필터링
+        filtered_df = df.copy()
+        for column, value in conditions.items():
+            filtered_df = filtered_df[filtered_df[column].astype(str).str.strip() == value]
         
-        st.warning("지원하지 않는 질문 형식입니다.")
-        return pd.DataFrame()  # 빈 데이터프레임 반환
+        # 날짜 필터링
+        for column, (condition_type, date_value) in date_conditions.items():
+            date_value = datetime.strptime(date_value, '%Y-%m-%d')
+            if condition_type == 'after':
+                filtered_df = filtered_df[filtered_df[column].apply(pd.to_datetime, errors='coerce') > date_value]
+            elif condition_type == 'before':
+                filtered_df = filtered_df[filtered_df[column].apply(pd.to_datetime, errors='coerce') < date_value]
+            elif condition_type == 'on':
+                filtered_df = filtered_df[filtered_df[column].apply(pd.to_datetime, errors='coerce') == date_value]
+        
+        if filtered_df.empty:
+            st.warning("조건에 맞는 데이터가 없습니다.")
+        
+        return filtered_df
 
     if query:
         # 필터링된 데이터프레임
