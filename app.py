@@ -5,7 +5,6 @@ from ibm_watson_machine_learning.foundation_models import Model
 from ibm_watson_machine_learning.foundation_models.extensions.langchain import WatsonxLLM
 from ibm_watson_machine_learning.metanames import GenTextParamsMetaNames as GenParams
 import sqlite3
-import json  # JSON 응답 파싱을 위해 추가
 
 # Watsonx API 설정
 my_credentials = {
@@ -85,9 +84,8 @@ def call_watsonx_api(query, table_name, columns):
     [/INST]
     """
     response = llm(QUERY)
-    # JSON 응답을 파싱하여 필요한 정보를 추출
-    response_json = json.loads(response)
-    sql_query = response_json["choices"][0]["text"].split("Response:")[1].split("---------------------- line break")[0].strip()
+    # 응답을 텍스트 형식으로 파싱하여 필요한 정보를 추출
+    sql_query = response.split("Response:")[1].split("---------------------- line break")[0].strip()
     return sql_query
 
 def execute_sql_query(conn, query):
