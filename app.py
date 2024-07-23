@@ -4,8 +4,8 @@ from datetime import datetime
 import requests  # HTTP 요청을 보내기 위한 모듈 추가
 
 # Watsonx API 설정
-WATSONX_API_URL = 'https://api.watsonx.ibm.com/v1/your-endpoint'  # 실제 엔드포인트로 교체
-WATSONX_API_KEY = 'your-api-key'  # 실제 API 키로 교체
+WATSONX_API_URL = 'https://us-south.ml.cloud.ibm.com/ml/v1/text/generation?version=2023-05-29'  # 실제 엔드포인트로 교체
+WATSONX_API_KEY = 'w3tA2Es6y0R5z5t2EMhI6sxEarmloP3WnrY902iC81uL'  # 실제 API 키로 교체
 
 # 페이지 제목
 st.title("CSV 파일 기반 질문 응답 시스템")
