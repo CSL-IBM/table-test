@@ -9,7 +9,7 @@ from ibm_watson_machine_learning.foundation_models import Model
 from ibm_watson_machine_learning.foundation_models.extensions.langchain import WatsonxLLM
 from ibm_watson_machine_learning.metanames import GenTextParamsMetaNames as GenParams
 from langchain_experimental.sql import SQLDatabaseChain
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, MetaData, Table
 
 # Watsonx 모델 설정
 my_credentials = {
@@ -68,12 +68,11 @@ def init_db():
     conn.close()
 
 def get_table_columns(table_name):
-    conn = sqlite3.connect('history.db', check_same_thread=False)
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA table_info({})".format(table_name))
-    columns = cursor.fetchall()
-    conn.close()
-    return [column[1] for column in columns]
+    engine = create_engine('sqlite:///history.db')
+    metadata = MetaData(bind=engine)
+    metadata.reflect()
+    table = Table(table_name, metadata, autoload_with=engine)
+    return list(table.columns.keys())
 
 table_name = 'transactions'
 columns = get_table_columns(table_name)
@@ -128,9 +127,23 @@ with st.form(key='inquiry_form'):
 
     if submit_button:
         # Handle transaction queries
-        prompt = QUERY.format(table_name=table_name, columns=columns, time=datetime.now(pytz.timezone('America/New_York')), inquiry=inquiry)
+        prompt = QUERY.format(
+            table_name=table_name,
+            columns=', '.join(columns),
+            time=datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d %H:%M:%S'),
+            inquiry=inquiry
+        )
         response = db_chain.run(prompt)
+
+        # Display response
+        st.write("Response:", response)
 
         # Fetch transactions data to display
         conn = sqlite3.connect('history.db', check_same_thread=False)
-        cursor = conn.execute('SELECT id,
+        cursor = conn.execute('SELECT * FROM transactions')
+        data = cursor.fetchall()
+        conn.close()
+
+        # Display the transactions table
+        st.write("Transactions Table:")
+        st.dataframe(pd.DataFrame(data, columns=columns))
