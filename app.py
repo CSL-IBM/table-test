@@ -51,42 +51,70 @@ def create_sqlite_table_from_df(df, table_name='transactions'):
 
 def call_watsonx_api(query, table_name, columns):
     QUERY = f"""
-    <<SYS>> 
-    You are a powerful text-to-SQLite model, and your role is to answer questions about a database. You are given questions and context regarding the Invoice details table, which represents the detailed records of currently open invoices.
-    The table name is {table_name} and corresponding columns are {columns}.
-    You must run SQLite queries to the table to find an answer. Ensure your query does not include any non-SQLite syntax such as DATE_TRUNC or any use of backticks (`) or "```sql". Then, execute this query against the 'transactions' table and provide the answer.
-
-    Guidelines:
-    - Filter results using the current time zone: only when query specifies a specific date/time period. You should use ">=" or "<=" operators to filter the date or use "GROUP BY strftime('%m', date)" for grouping into month. Assume the date format in the database is 'YYYY-MM-DD'.
-    - If the query result is [(None,)], run the SQLite query again to double check the answer. 
-    - If a specific category is mentioned in the inquiry, such as 'Yellow', 'Red', or 'Green', use the "WHERE" condition in your SQL query to filter transactions by that category. For example, when asked for the complete invoice details for 'Green', use "FROM transactions WHERE category = 'Green'".
-    - If not asked for a specific category, you shouldn't filter any category out. On the other hand, you should use "where" condition to do the filtering. When asked for the average amount in a category, use the SQLite query (AVG(amount) WHERE category = 'category_name').
-    - When asked for 'highest' or 'lowest', use SQL function MAX() or MIN() respectively.
-    - If a specific condition is provided in the inquiry, such as mentioning a specific Collector like 'John', 'David', 'Lisa', 'Mary', or 'Michael', and specifying a category such as 'Yellow', 'Red', or 'Green', use the "WHERE" clause in your SQL query to filter transactions accordingly. For example, if you need to fetch invoice details for 'John' and 'Green', you would use "FROM transactions WHERE Collector = 'John' AND category = 'Green'".
-
-    Use the following format to answer the inquiry:
-
-    Response: Result of the SQLite-compatible SQL query. If you know the transaction details such as the Category, Customer Name, Customer #, Inv. #, Inv. Amt, Inv. Date, Due Date, Forecast Code, Forecast Date, and Collector, mention it in your answer to be more clear.
-    ---------------------- line break
-    <br>
-    ---------------------- line break
-    <br>
-    Explanation: Concise and succinct explanation on your thought process on how to get the final answer including the relevant transaction details such as the Category, Customer Name, Customer #, Inv. #, Inv. Amt, Inv. Date, Due Date, Forecast Code, Forecast Date, and Collector.
-    ---------------------- line break
-    <br>
-    ---------------------- line break
-    <br>
-    Advice: Provide tips here, such as reminding users of progress for invoices with a due date within 10 days by comparing the due date with today.
     <</SYS>>
 
-    [INST] 
+    [INST]
+    To ensure the generated SQL queries follow best practices for SQLite, please adhere to the following guidelines:
+    1. **Identify the Table and Columns**:
+       - Ensure the table being queried is `transactions`.
+       - Use the provided columns for querying.
+
+    2. **Filter by Specific Conditions**:
+       - Apply the `WHERE` clause for filtering based on specific conditions such as Collector or category.
+       - Example: To filter transactions for 'John' in the 'Green' category, use:
+         ```sql
+         SELECT * FROM transactions WHERE Collector = 'John' AND category = 'Green';
+         ```    
+
+    3. **Date Filtering and Grouping**:
+       - Use `>=` and `<=` operators for date filtering.
+         ```sql
+         SELECT * FROM transactions WHERE date >= '2023-01-01' AND date <= '2023-12-31';
+         ```
+       - To group by month, use `GROUP BY strftime('%m', date)`:
+         ```sql
+         SELECT strftime('%m', date) AS month, COUNT(*) FROM transactions GROUP BY month;
+         ```
+
+    4. **Query Execution**:
+       - Ensure the query does not include non-SQLite syntax such as `DATE_TRUNC` or backticks.
+       - Execute the query to retrieve results.
+
+    5. **Check and Validate Results**:
+       - If the query result is `[(None,)]`, re-run the query to verify.
+
+    Please generate an SQL query based on the following input query:
     {query}
     [/INST]
     """
-    response = llm(QUERY)
-    # 응답을 텍스트 형식으로 파싱하여 필요한 정보를 추출
-    sql_query = response.split("Response:")[1].split("---------------------- line break")[0].strip()
+
+response = llm(QUERY)
+
+# 응답을 텍스트 형식으로 파싱하여 필요한 정보를 추출
+sql_query = response.split("Response:")[1].split("---------------------- line break")[0].strip()
+
+# 가이드라인을 적용하여 SQL 쿼리 검토 및 조정
+def apply_guidelines(sql_query):
+    # 비-SQLite 문법 제거
+    sql_query = sql_query.replace('DATE_TRUNC', '')  # DATE_TRUNC 제거
+    sql_query = sql_query.replace('`', '')           # 백틱 제거
+
+    # 특정 조건에 따라 필터 추가
+    if 'Collector' in sql_query and 'category' in sql_query:
+        if 'date' in sql_query:
+            # 날짜 필터링이 >= 및 <= 연산자를 사용하는지 확인
+            sql_query = sql_query.replace('BETWEEN', '>=').replace('AND', 'AND').replace('TO', '<=')
+
+        # 월별 그룹화 확인 및 수정
+        if 'GROUP BY' in sql_query:
+            if 'strftime' not in sql_query:
+                sql_query = sql_query.replace('GROUP BY', 'GROUP BY strftime(\'%m\', date)')
+
     return sql_query
+
+# 가이드라인을 적용하여 SQL 쿼리 수정
+sql_query = apply_guidelines(sql_query)
+return sql_query
 
 def execute_sql_query(conn, query):
     try:
