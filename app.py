@@ -1,11 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import requests  # HTTP 요청을 보내기 위한 모듈 추가
-
-# Watsonx API 설정
-WATSONX_API_URL = 'https://us-south.ml.cloud.ibm.com'  # 실제 엔드포인트로 교체
-WATSONX_API_KEY = 'nlIyp8vWDoY4Z60ScG3YsaX40yqkWLiMcRBMtW222xMH'  # 실제 API 키로 교체
+import re  # 정규 표현식 모듈 추가
 
 # 페이지 제목
 st.title("CSV 파일 기반 질문 응답 시스템")
@@ -25,21 +21,6 @@ COLLECTOR = "Collector"
 # 파일 업로드
 uploaded_file = st.file_uploader("CSV 파일을 업로드하세요", type=["csv"])
 
-def call_watsonx_api(query):
-    headers = {
-        'Authorization': f'Bearer {WATSONX_API_KEY}',
-        'Content-Type': 'application/json'
-    }
-    payload = {
-        'query': query,
-        'context': {
-            'data': 'contextual information if needed'
-        }
-    }
-    response = requests.post(WATSONX_API_URL, headers=headers, json=payload)
-    response.raise_for_status()  # API 요청 실패 시 예외 발생
-    return response.json()
-
 if uploaded_file is not None:
     # CSV 파일 로드
     df = pd.read_csv(uploaded_file)
@@ -54,15 +35,65 @@ if uploaded_file is not None:
 
     query = st.text_input("질문을 입력하세요:")
 
-    if query:
-        # Watsonx API를 호출하여 질문 분석
-        response = call_watsonx_api(query)
-        extracted_conditions = response.get('conditions', {})
-        date_conditions = response.get('date_conditions', {})
+    # 날짜 조건 처리 함수
+    def parse_date_conditions(query):
+        date_conditions = {}
+        # 날짜 이후, 이전, 특정 날짜에 대한 패턴 정의
+        date_patterns = [
+            (r'(\w+)가 (\d{4}-\d{2}-\d{2}) 이후', 'after'),
+            (r'(\w+)가 (\d{4}-\d{2}-\d{2}) 이전', 'before'),
+            (r'(\w+)가 (\d{4}-\d{2}-\d{2})', 'on')
+        ]
+        
+        for pattern, condition_type in date_patterns:
+            match = re.search(pattern, query)
+            if match:
+                column = match.group(1)
+                date_value = match.group(2)
+                if column in [DUE_DATE, INVOICE_DATE, FORECAST_DATE]:  # 날짜 열만 필터링
+                    date_conditions[column] = (condition_type, date_value)
+        
+        return date_conditions
+
+    # 조건 추출 함수
+    def extract_conditions(query):
+        conditions = {}
+        date_conditions = parse_date_conditions(query)
+        
+        # 문자열 조건 추출
+        for pattern in patterns.values():
+            if pattern in query:
+                column = next(col for col, pat in patterns.items() if pat == pattern)
+                try:
+                    value = re.split(r'이야|이고', query.split(pattern)[1].strip())[0].strip()
+                    if column in df.columns and column not in date_conditions:
+                        conditions[column] = value
+                except IndexError:
+                    st.warning(f"질문에서 '{column}'의 값을 추출할 수 없습니다.")
+        
+        return conditions, date_conditions
+
+    # 질문에 따른 필터링 함수
+    def filter_dataframe(query, df):
+        # 필터링할 열과 값을 추출하는 정규 표현식 패턴 정의
+        patterns = {
+            CATEGORY: f"{CATEGORY}는",
+            CUSTOMER_NAME: f"{CUSTOMER_NAME}는",
+            CUSTOMER_NUMBER: f"{CUSTOMER_NUMBER}는",
+            INVOICE_NUMBER: f"{INVOICE_NUMBER}는",
+            INVOICE_AMOUNT: f"{INVOICE_AMOUNT}는",
+            INVOICE_DATE: f"{INVOICE_DATE}는",
+            DUE_DATE: f"{DUE_DATE}는",
+            FORECAST_CODE: f"{FORECAST_CODE}는",
+            FORECAST_DATE: f"{FORECAST_DATE}는",
+            COLLECTOR: f"{COLLECTOR}는"
+        }
+        
+        conditions, date_conditions = extract_conditions(query)
         
         # 필터링
         filtered_df = df.copy()
-        for column, value in extracted_conditions.items():
+        for column, value in conditions.items():
             if column in filtered_df.columns:
                 filtered_df = filtered_df[filtered_df[column].astype(str).str.strip() == value]
         
@@ -80,6 +111,13 @@ if uploaded_file is not None:
         if filtered_df.empty:
             st.warning("조건에 맞는 데이터가 없습니다.")
         
+        return filtered_df
+
+    if query:
+        # 필터링된 데이터프레임
+        filtered_df = filter_dataframe(query, df)
+
+        # 필터링된 테이블 표시
         st.write("필터링된 결과:")
         st.dataframe(filtered_df)
     else:
