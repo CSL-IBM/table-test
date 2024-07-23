@@ -31,6 +31,7 @@ if uploaded_file is not None:
     st.write(f"'{CUSTOMER_NAME}는 Alice 이고, {INVOICE_AMOUNT}는 5000이야'")
     st.write(f"'{INVOICE_DATE}는 2024-07-01 이고, {FORECAST_CODE}는 FC2024야'")
     st.write(f"'{DUE_DATE}가 2024-07-01 이후'")  # 날짜 조건 예시
+    st.write(f"'{INVOICE_DATE}는 2024-07-01 이고, {FORECAST_CODE}는 AUTO야'")  # 복합 조건 예시
 
     query = st.text_input("질문을 입력하세요:")
 
@@ -39,9 +40,9 @@ if uploaded_file is not None:
         date_conditions = {}
         # 날짜 이후, 이전, 특정 날짜에 대한 패턴 정의
         date_patterns = [
-            (r'(\w+)가 (\d{4}-\d{2}-\d{2}) 이후', 'after'),
-            (r'(\w+)가 (\d{4}-\d{2}-\d{2}) 이전', 'before'),
-            (r'(\w+)가 (\d{4}-\d{2}-\d{2})', 'on')
+            (r'(\w+)는 (\d{4}-\d{2}-\d{2}) 이후', 'after'),
+            (r'(\w+)는 (\d{4}-\d{2}-\d{2}) 이전', 'before'),
+            (r'(\w+)는 (\d{4}-\d{2}-\d{2})', 'on')
         ]
         
         for pattern, condition_type in date_patterns:
