@@ -2,8 +2,6 @@ import streamlit as st
 import pandas as pd
 import requests
 import io
-from datetime import datetime
-import re
 
 # 페이지 제목
 st.title("고정된 Box 링크 기반 CSV 파일 질문 응답 시스템")
