@@ -4,7 +4,7 @@ from datetime import datetime
 import requests  # HTTP 요청을 보내기 위한 모듈 추가
 
 # Watsonx API 설정
-WATSONX_API_URL = 'https://us-south.ml.cloud.ibm.com/ml/v1/text/generation?version=2023-05-29'  # 실제 엔드포인트로 교체
+WATSONX_API_URL = 'https://us-south.ml.cloud.ibm.com'  # 실제 엔드포인트로 교체
 WATSONX_API_KEY = 'nlIyp8vWDoY4Z60ScG3YsaX40yqkWLiMcRBMtW222xMH'  # 실제 API 키로 교체
 
 # 페이지 제목
