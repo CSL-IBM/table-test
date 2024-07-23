@@ -142,3 +142,4 @@ wrapt==1.16.0
 yarl==1.9.3
 zipp==3.17.0
 beautifulsoup4==4.12.0
+sqlalchemy
