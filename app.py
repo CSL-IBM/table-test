@@ -32,3 +32,10 @@ if uploaded_file is not None:
         st.write("필터링된 결과:")
         st.dataframe(filtered_df)
     else:
+        st.write("질문을 입력하세요.")
+
+    # 원본 CSV 테이블 표시
+    st.write("원본 CSV 테이블:")
+    st.dataframe(df)
+else:
+    st.warning("CSV 파일을 업로드하세요.")
