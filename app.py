@@ -62,6 +62,22 @@ def init_db():
     csv_data = response.content.decode('utf-8')
     data = pd.read_csv(StringIO(csv_data))
 
+    # Rename columns if necessary to match the SQL table schema
+    column_mapping = {
+        'No': 'id',  # Example mapping, adjust as necessary
+        'Category': 'Category',
+        'CustomerName': 'CustomerName',
+        'CustomerNumber': 'CustomerNumber',
+        'InvoiceNumber': 'InvoiceNumber',
+        'InvoiceAmount': 'InvoiceAmount',
+        'InvoiceDate': 'InvoiceDate',
+        'DueDate': 'DueDate',
+        'ForecastCode': 'ForecastCode',
+        'ForecastDate': 'ForecastDate',
+        'Collector': 'Collector'
+    }
+    data.rename(columns=column_mapping, inplace=True)
+
     # Convert date columns to string format
     date_columns = ['InvoiceDate', 'DueDate', 'ForecastDate']
     for col in date_columns:
