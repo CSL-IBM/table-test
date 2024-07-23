@@ -56,14 +56,13 @@ if uploaded_file is not None:
         return date_conditions
 
     # 조건 추출 함수
-    def extract_conditions(query):
+    def extract_conditions(query, patterns):
         conditions = {}
         date_conditions = parse_date_conditions(query)
         
         # 문자열 조건 추출
-        for pattern in patterns.values():
+        for column, pattern in patterns.items():
             if pattern in query:
-                column = next(col for col, pat in patterns.items() if pat == pattern)
                 try:
                     value = re.split(r'이야|이고', query.split(pattern)[1].strip())[0].strip()
                     if column in df.columns and column not in date_conditions:
@@ -89,7 +88,7 @@ if uploaded_file is not None:
             COLLECTOR: f"{COLLECTOR}는"
         }
         
-        conditions, date_conditions = extract_conditions(query)
+        conditions, date_conditions = extract_conditions(query, patterns)
         
         # 필터링
         filtered_df = df.copy()
@@ -106,8 +105,7 @@ if uploaded_file is not None:
                 elif condition_type == 'before':
                     filtered_df = filtered_df[filtered_df[column].apply(pd.to_datetime, errors='coerce') < date_value]
                 elif condition_type == 'on':
-                    filtered_df = filtered_df[filtered_df[column].apply(pd.to_datetime, errors='coerce') == date_value]
-        
+                    filtered_df = filtered_df[filtered_df[column].
         if filtered_df.empty:
             st.warning("조건에 맞는 데이터가 없습니다.")
         
