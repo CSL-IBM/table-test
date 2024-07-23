@@ -37,9 +37,10 @@ def init_db():
     engine = create_engine('sqlite:///history.db')
     conn = sqlite3.connect('history.db', check_same_thread=False)
 
-    # Create table if not exists
+    # Drop table if exists and create it
+    conn.execute("DROP TABLE IF EXISTS transactions")
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS transactions (
+        CREATE TABLE transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             Category TEXT,
             CustomerName TEXT,
@@ -61,8 +62,17 @@ def init_db():
     csv_data = response.content.decode('utf-8')
     data = pd.read_csv(StringIO(csv_data))
 
+    # Convert date columns to string format
+    date_columns = ['InvoiceDate', 'DueDate', 'ForecastDate']
+    for col in date_columns:
+        if col in data.columns:
+            data[col] = pd.to_datetime(data[col], errors='coerce').dt.strftime('%Y-%m-%d')
+
     # Write data to SQL
-    data.to_sql('transactions', engine, if_exists='append', index=False)
+    try:
+        data.to_sql('transactions', engine, if_exists='append', index=False)
+    except Exception as e:
+        st.error(f"Error occurred while writing data to SQL: {e}")
 
     conn.commit()
     conn.close()
