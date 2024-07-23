@@ -1,6 +1,7 @@
 import streamlit as st
 import sqlite3
-import csv
+import requests
+import pandas as pd
 from datetime import datetime
 import pytz
 from ibm_watson_machine_learning.foundation_models import Model
@@ -29,13 +30,8 @@ LLAMA2_model = Model(
 llm = WatsonxLLM(LLAMA2_model)
 
 # Streamlit 애플리케이션
-def get_db_connection():
-    conn = sqlite3.connect('history.db', check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
-
 def init_db():
-    conn = get_db_connection()
+    conn = sqlite3.connect('history.db', check_same_thread=False)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,20 +47,25 @@ def init_db():
             Collector TEXT
         );
     """)
+    # Load CSV data from GitHub
+    github_csv_url = "https://raw.githubusercontent.com/CSL-IBM/table-test/main/transactions.csv"
+    response = requests.get(github_csv_url)
+    response.raise_for_status()
+    csv_data = response.content.decode('utf-8')
+    data = pd.read_csv(pd.compat.StringIO(csv_data))
+    
     if conn.execute('SELECT COUNT(*) FROM transactions').fetchone()[0] == 0:
-        with open('transactions.csv', 'r') as file:
-            reader = csv.reader(file)
-            next(reader)
-            sample_data = list(reader)
-            conn.executemany('INSERT INTO transactions (Category, CustomerName, CustomerNumber, InvoiceNumber, InvoiceAmount, InvoiceDate, DueDate, ForecastCode, ForecastDate, Collector) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', sample_data)
+        data.to_sql('transactions', conn, if_exists='append', index=False)
+    
     conn.commit()
     conn.close()
 
 def get_table_columns(table_name):
-    conn = get_db_connection()
+    conn = sqlite3.connect('history.db', check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute("PRAGMA table_info({})".format(table_name))
     columns = cursor.fetchall()
+    conn.close()
     return [column[1] for column in columns]
 
 table_name = 'transactions'
@@ -124,7 +125,7 @@ with st.form(key='inquiry_form'):
         response = db_chain.run(prompt)
 
         # Fetch transactions data to display
-        conn = get_db_connection()
+        conn = sqlite3.connect('history.db', check_same_thread=False)
         cursor = conn.execute('SELECT id, * FROM transactions ORDER BY InvoiceDate DESC')
         transactions = [dict(ix) for ix in cursor.fetchall()]
         conn.close()
