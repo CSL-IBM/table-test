@@ -2,6 +2,7 @@ import streamlit as st
 import sqlite3
 import requests
 import pandas as pd
+from io import StringIO
 from datetime import datetime
 import pytz
 from ibm_watson_machine_learning.foundation_models import Model
@@ -52,7 +53,7 @@ def init_db():
     response = requests.get(github_csv_url)
     response.raise_for_status()
     csv_data = response.content.decode('utf-8')
-    data = pd.read_csv(pd.compat.StringIO(csv_data))
+    data = pd.read_csv(StringIO(csv_data))
     
     if conn.execute('SELECT COUNT(*) FROM transactions').fetchone()[0] == 0:
         data.to_sql('transactions', conn, if_exists='append', index=False)
@@ -142,4 +143,3 @@ with st.form(key='inquiry_form'):
         # Display the transaction table
         st.subheader('Transaction Data')
         st.write(transactions)
-
