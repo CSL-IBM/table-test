@@ -9,7 +9,7 @@ from ibm_watson_machine_learning.foundation_models import Model
 from ibm_watson_machine_learning.foundation_models.extensions.langchain import WatsonxLLM
 from ibm_watson_machine_learning.metanames import GenTextParamsMetaNames as GenParams
 from langchain_experimental.sql import SQLDatabaseChain
-from sqlalchemy import create_engine, MetaData, Table
+from sqlalchemy import create_engine, inspect
 
 # Watsonx 모델 설정
 my_credentials = {
@@ -69,10 +69,9 @@ def init_db():
 
 def get_table_columns(table_name):
     engine = create_engine('sqlite:///history.db')
-    metadata = MetaData(bind=engine)
-    metadata.reflect()
-    table = Table(table_name, metadata, autoload_with=engine)
-    return list(table.columns.keys())
+    inspector = inspect(engine)
+    columns = [col['name'] for col in inspector.get_columns(table_name)]
+    return columns
 
 table_name = 'transactions'
 columns = get_table_columns(table_name)
