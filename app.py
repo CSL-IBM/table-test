@@ -1,109 +1,144 @@
 import streamlit as st
-import pandas as pd
-import requests
-import io
-import re
+import sqlite3
+import csv
 from datetime import datetime
+import pytz
+from ibm_watson_machine_learning.foundation_models import Model
+from ibm_watson_machine_learning.foundation_models.extensions.langchain import WatsonxLLM
+from ibm_watson_machine_learning.metanames import GenTextParamsMetaNames as GenParams
+from langchain_experimental.sql import SQLDatabaseChain
 
-# 페이지 제목
-st.title("GitHub에서 CSV 데이터 추출")
+# Watsonx 모델 설정
+my_credentials = {
+    "url": "https://us-south.ml.cloud.ibm.com",
+    "apikey": "hkEEsPjALuKUCakgA4IuR0SfTyVC9uT0qlQpA15Rcy8U"
+}
 
-# GitHub의 원시 CSV 파일 URL
-github_csv_url = "https://raw.githubusercontent.com/CSL-IBM/table-test/main/transactions.csv"
+params = {
+    GenParams.MAX_NEW_TOKENS: 1000,
+    GenParams.TEMPERATURE: 0.1,
+}
 
-try:
-    # 파일 다운로드
-    response = requests.get(github_csv_url)
-    response.raise_for_status()  # HTTP 오류 발생 시 예외를 발생시킴
+LLAMA2_model = Model(
+    model_id='meta-llama/llama-2-70b-chat',
+    credentials=my_credentials,
+    params=params,
+    project_id="16acfdcc-378f-4268-a2f4-ba04ca7eca08",
+)
 
-    # CSV 데이터를 DataFrame으로 읽기
-    file_content = io.StringIO(response.text)
-    df = pd.read_csv(file_content, encoding='utf-8')
-    
-    # 열 이름을 딕셔너리의 키로 사용
-    column_dict = {col: col for col in df.columns}
+llm = WatsonxLLM(LLAMA2_model)
 
-    # 예시 질문
-    st.write("예시 질문:")
-    st.write(f"'{column_dict.get('Category')}는 Red 이고, {column_dict.get('Collector')}는 John이야'")
-    st.write(f"'{column_dict.get('CustomerName')}는 Alice 이고, {column_dict.get('InvoiceAmount')}는 5000이야'")
-    st.write(f"'{column_dict.get('InvoiceDate')}는 2024-07-01 이고, {column_dict.get('ForecastCode')}는 FC2024야'")
-    st.write(f"'{column_dict.get('DueDate')}가 2024-07-01 이후'")  # 날짜 조건 예시
-    st.write(f"'{column_dict.get('InvoiceDate')}는 2024-07-01 이고, {column_dict.get('ForecastCode')}는 FCST야'")  # 복합 조건 예시
+# Streamlit 애플리케이션
+def get_db_connection():
+    conn = sqlite3.connect('history.db', check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-    query = st.text_input("질문을 입력하세요:")
+def init_db():
+    conn = get_db_connection()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            Category TEXT,
+            CustomerName TEXT,
+            CustomerNumber TEXT,
+            InvoiceNumber TEXT,
+            InvoiceAmount INTEGER,
+            InvoiceDate DATE,
+            DueDate DATE,
+            ForecastCode TEXT,
+            ForecastDate DATE,
+            Collector TEXT
+        );
+    """)
+    if conn.execute('SELECT COUNT(*) FROM transactions').fetchone()[0] == 0:
+        with open('transactions.csv', 'r') as file:
+            reader = csv.reader(file)
+            next(reader)
+            sample_data = list(reader)
+            conn.executemany('INSERT INTO transactions (Category, CustomerName, CustomerNumber, InvoiceNumber, InvoiceAmount, InvoiceDate, DueDate, ForecastCode, ForecastDate, Collector) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', sample_data)
+    conn.commit()
+    conn.close()
 
-    # 조건 추출 함수
-    def extract_conditions(query):
-        conditions = {}
-        date_conditions = {}
-        
-        # 날짜 조건 처리
-        date_patterns = [
-            (r'(\w+)가 (\d{4}-\d{2}-\d{2}) 이후', 'after'),
-            (r'(\w+)가 (\d{4}-\d{2}-\d{2}) 이전', 'before'),
-            (r'(\w+)가 (\d{4}-\d{2}-\d{2})', 'on')
-        ]
-        for pattern, condition_type in date_patterns:
-            match = re.search(pattern, query)
-            if match:
-                column = match.group(1)
-                date_value = match.group(2)
-                if column in column_dict.values():  # 열 이름이 DataFrame에 존재하는지 확인
-                    date_conditions[column] = (condition_type, date_value)
-        
-        # 문자열 조건 추출
-        string_patterns = {col: f"{col}는" for col in column_dict.values()}
-        for column, keyword in string_patterns.items():
-            # 정규 표현식을 사용하여 값 추출
-            pattern = rf'{keyword}\s*([^이야|이고|,]+)'
-            match = re.search(pattern, query)
-            if match:
-                value = match.group(1).strip()
-                if column in df.columns and column not in date_conditions:
-                    conditions[column] = value
+def get_table_columns(table_name):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info({})".format(table_name))
+    columns = cursor.fetchall()
+    return [column[1] for column in columns]
 
-        return conditions, date_conditions
+table_name = 'transactions'
+columns = get_table_columns(table_name)
 
-    # 질문에 따른 필터링 함수
-    def filter_dataframe(query, df):
-        conditions, date_conditions = extract_conditions(query)
-        
-        filtered_df = df.copy()
-        for column, value in conditions.items():
-            if column in filtered_df.columns:
-                filtered_df = filtered_df[filtered_df[column].astype(str).str.strip() == value]
-        
-        for column, (condition_type, date_value) in date_conditions.items():
-            date_value = datetime.strptime(date_value, '%Y-%m-%d')
-            if column in filtered_df.columns:
-                if condition_type == 'after':
-                    filtered_df = filtered_df[filtered_df[column].apply(pd.to_datetime, errors='coerce') > date_value]
-                elif condition_type == 'before':
-                    filtered_df = filtered_df[filtered_df[column].apply(pd.to_datetime, errors='coerce') < date_value]
-                elif condition_type == 'on':
-                    filtered_df = filtered_df[filtered_df[column].apply(pd.to_datetime, errors='coerce') == date_value]
-        
-        if filtered_df.empty:
-            st.warning("조건에 맞는 데이터가 없습니다.")
-        
-        return filtered_df
+QUERY = """
+<<SYS>> 
+You are a powerful text-to-SQLite model, and your role is to answer questions about a database. You are given questions and context regarding the Invoice details table, which represents the detailed records of currently open invoices.
+The table name is {table_name} and corresponding columns are {columns}.
+You must run SQLite queries to the table to find an answer. Ensure your query does not include any non-SQLite syntax such as DATE_TRUNC or any use of backticks (`) or "```sql". Then, execute this query against the 'transactions' table and provide the answer.
 
-    if query:
-        # 필터링된 데이터프레임
-        filtered_df = filter_dataframe(query, df)
+Guidelines:
+- Filter results using the current time zone: {time} only when query specifies a specific date/time period. You should use ">=" or "<=" operators to filter the date or use "GROUP BY strftime('%m', date)" for grouping into month.  Assume the date format in the database is 'YYYY-MM-DD'.
+- If the query result is [(None,)], run the SQLite query again to double check the answer. 
+- If a specific category is mentioned in the inquiry, such as 'Yellow', 'Red', or 'Green', use the "WHERE" condition in your SQL query to filter transactions by that category. For example, when asked for the complete invoice details for 'Green', use "FROM transactions WHERE category = 'Green'".
+- If not asked for a specific category, you shouldn't filter any category out. On the other hand, you should use "where" condition to do the filtering. When asked for the average amount in a category, use the SQLite query (AVG(amount) WHERE category = 'category_name').
+- When asked for 'highest' or 'lowest', use SQL function MAX() or MIN() respectively.
+- If a specific condition is provided in the inquiry, such as mentioning a specific Collector like 'John', 'David', 'Lisa', 'Mary', or 'Michael', and specifying a category such as 'Yellow', 'Red', or 'Green', use the "WHERE" clause in your SQL query to filter transactions accordingly. For example, if you need to fetch invoice details for 'John' and 'Green', you would use "FROM transactions WHERE Collector = 'John' AND category = 'Green'".
 
-        # 필터링된 테이블 표시
-        st.write("필터링된 결과:")
-        st.dataframe(filtered_df)
-    else:
-        st.write("질문을 입력하세요.")
+Use the following format to answer the inquiry:
 
-    # 원본 CSV 테이블 표시
-    st.write("원본 CSV 테이블:")
-    st.dataframe(df)
+Response: Result of the SQLite-compatible SQL query. If you know the transaction details such as the Category, Customer Name, Customer #, Inv. #, Inv. Amt, Inv. Date, Due Date, Forecast Code, Forecast Date, and Collector, mention it in your answer to be more clear.
+---------------------- line break
+<br>
+---------------------- line break
+<br>
+Explanation: Concise and succinct explanation on your thought process on how to get the final answer including the relevant transaction details such as the Category, Customer Name, Customer #, Inv. #, Inv. Amt, Inv. Date, Due Date, Forecast Code, Forecast Date, and Collector.
+---------------------- line break
+<br>
+---------------------- line break
+<br>
+Advice: Provide tips here, such as reminding users of progress for invoices with a due date within 10 days by comparing the due date with today.
 
-except requests.exceptions.RequestException as e:
-    st.error(f"파일 다운로드 중 오류가 발생했습니다: {e}")
-except pd.errors.ParserError as e:
-    st.error(f"CSV 파일을 읽는 중 오류가 발생했습니다: {e}")
+<</SYS>>
+
+[INST] 
+{inquiry}
+[/INST]
+"""
+
+# Initialize database
+init_db()
+
+# Create the database chain
+db_chain = SQLDatabaseChain.from_llm(llm, SQLDatabase.from_uri("sqlite:///history.db"), verbose=True)
+
+st.title('Invoice Query System')
+
+# Input form for user inquiry
+with st.form(key='inquiry_form'):
+    inquiry = st.text_area('Enter your inquiry:')
+    submit_button = st.form_submit_button(label='Submit')
+
+    if submit_button:
+        # Handle transaction queries
+        prompt = QUERY.format(table_name=table_name, columns=columns, time=datetime.now(pytz.timezone('America/New_York')), inquiry=inquiry)
+        response = db_chain.run(prompt)
+
+        # Fetch transactions data to display
+        conn = get_db_connection()
+        cursor = conn.execute('SELECT id, * FROM transactions ORDER BY InvoiceDate DESC')
+        transactions = [dict(ix) for ix in cursor.fetchall()]
+        conn.close()
+
+        # Replace newline characters with HTML break tags in the response
+        response = response.replace('\n', '<br>')
+
+        # Display the results
+        st.subheader('Inquiry')
+        st.write(prompt)
+        st.subheader('Answer')
+        st.markdown(response, unsafe_allow_html=True)
+
+        # Display the transaction table
+        st.subheader('Transaction Data')
+        st.write(transactions)
+
