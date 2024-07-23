@@ -9,6 +9,7 @@ from ibm_watson_machine_learning.foundation_models import Model
 from ibm_watson_machine_learning.foundation_models.extensions.langchain import WatsonxLLM
 from ibm_watson_machine_learning.metanames import GenTextParamsMetaNames as GenParams
 from langchain_experimental.sql import SQLDatabaseChain
+from sqlalchemy import create_engine
 
 # Watsonx 모델 설정
 my_credentials = {
@@ -32,7 +33,11 @@ llm = WatsonxLLM(LLAMA2_model)
 
 # Streamlit 애플리케이션
 def init_db():
+    # Create SQLite engine
+    engine = create_engine('sqlite:///history.db')
     conn = sqlite3.connect('history.db', check_same_thread=False)
+
+    # Create table if not exists
     conn.execute("""
         CREATE TABLE IF NOT EXISTS transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,16 +53,17 @@ def init_db():
             Collector TEXT
         );
     """)
+
     # Load CSV data from GitHub
     github_csv_url = "https://raw.githubusercontent.com/CSL-IBM/table-test/main/transactions.csv"
     response = requests.get(github_csv_url)
     response.raise_for_status()
     csv_data = response.content.decode('utf-8')
     data = pd.read_csv(StringIO(csv_data))
-    
-    if conn.execute('SELECT COUNT(*) FROM transactions').fetchone()[0] == 0:
-        data.to_sql('transactions', conn, if_exists='append', index=False)
-    
+
+    # Write data to SQL
+    data.to_sql('transactions', engine, if_exists='append', index=False)
+
     conn.commit()
     conn.close()
 
@@ -127,19 +133,4 @@ with st.form(key='inquiry_form'):
 
         # Fetch transactions data to display
         conn = sqlite3.connect('history.db', check_same_thread=False)
-        cursor = conn.execute('SELECT id, * FROM transactions ORDER BY InvoiceDate DESC')
-        transactions = [dict(ix) for ix in cursor.fetchall()]
-        conn.close()
-
-        # Replace newline characters with HTML break tags in the response
-        response = response.replace('\n', '<br>')
-
-        # Display the results
-        st.subheader('Inquiry')
-        st.write(prompt)
-        st.subheader('Answer')
-        st.markdown(response, unsafe_allow_html=True)
-
-        # Display the transaction table
-        st.subheader('Transaction Data')
-        st.write(transactions)
+        cursor = conn.execute('SELECT id,
