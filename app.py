@@ -31,18 +31,18 @@ if uploaded_file is not None:
     st.write(f"'{CUSTOMER_NAME}는 Alice 이고, {INVOICE_AMOUNT}는 5000이야'")
     st.write(f"'{INVOICE_DATE}는 2024-07-01 이고, {FORECAST_CODE}는 FC2024야'")
     st.write(f"'{DUE_DATE}가 2024-07-01 이후'")  # 날짜 조건 예시
-    st.write(f"'{INVOICE_DATE}는 2024-07-01 이고, {FORECAST_CODE}는 AUTO야'")  # 복합 조건 예시
+    st.write(f"'{INVOICE_DATE}는 2024-07-01 이고, {FORECAST_CODE}는 FCST야'")  # 복합 조건 예시
 
     query = st.text_input("질문을 입력하세요:")
 
     # 날짜 조건 처리 함수
-    def parse_date_condition(query):
+    def parse_date_conditions(query):
         date_conditions = {}
         # 날짜 이후, 이전, 특정 날짜에 대한 패턴 정의
         date_patterns = [
-            (r'(\w+)는 (\d{4}-\d{2}-\d{2}) 이후', 'after'),
-            (r'(\w+)는 (\d{4}-\d{2}-\d{2}) 이전', 'before'),
-            (r'(\w+)는 (\d{4}-\d{2}-\d{2})', 'on')
+            (r'(\w+)가 (\d{4}-\d{2}-\d{2}) 이후', 'after'),
+            (r'(\w+)가 (\d{4}-\d{2}-\d{2}) 이전', 'before'),
+            (r'(\w+)가 (\d{4}-\d{2}-\d{2})', 'on')
         ]
         
         for pattern, condition_type in date_patterns:
@@ -55,8 +55,8 @@ if uploaded_file is not None:
         
         return date_conditions
 
-    # 질문에 따른 필터링 함수
-    def filter_dataframe(query, df):
+    # 조건 추출 함수
+    def extract_conditions(query):
         # 필터링할 열과 값을 추출하는 정규 표현식 패턴 정의
         patterns = {
             CATEGORY: f"{CATEGORY}는",
@@ -72,7 +72,7 @@ if uploaded_file is not None:
         }
         
         conditions = {}
-        date_conditions = parse_date_condition(query)
+        date_conditions = parse_date_conditions(query)
         
         # 조건 추출
         for column, pattern in patterns.items():
@@ -83,6 +83,12 @@ if uploaded_file is not None:
                         conditions[column] = value
                 except IndexError:
                     st.warning(f"질문에서 '{column}'의 값을 추출할 수 없습니다.")
+        
+        return conditions, date_conditions
+
+    # 질문에 따른 필터링 함수
+    def filter_dataframe(query, df):
+        conditions, date_conditions = extract_conditions(query)
         
         # 필터링
         filtered_df = df.copy()
