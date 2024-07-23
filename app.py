@@ -33,15 +33,17 @@ try:
 
     query = st.text_input("질문을 입력하세요:")
 
-    # 날짜 조건 처리 함수
-    def parse_date_conditions(query):
+    # 조건 추출 함수
+    def extract_conditions(query):
+        conditions = {}
         date_conditions = {}
+        
+        # 날짜 조건 처리
         date_patterns = [
             (r'(\w+)가 (\d{4}-\d{2}-\d{2}) 이후', 'after'),
             (r'(\w+)가 (\d{4}-\d{2}-\d{2}) 이전', 'before'),
             (r'(\w+)가 (\d{4}-\d{2}-\d{2})', 'on')
         ]
-        
         for pattern, condition_type in date_patterns:
             match = re.search(pattern, query)
             if match:
@@ -50,31 +52,21 @@ try:
                 if column in column_dict.values():  # 열 이름이 DataFrame에 존재하는지 확인
                     date_conditions[column] = (condition_type, date_value)
         
-        return date_conditions
-
-    # 조건 추출 함수
-    def extract_conditions(query):
-        conditions = {}
-        date_conditions = parse_date_conditions(query)
-        
         # 문자열 조건 추출
-        patterns = {col: f"{col}는" for col in column_dict.values()}
-        for pattern in patterns.values():
-            if pattern in query:
-                column = next(col for col, pat in patterns.items() if pat == pattern)
-                try:
-                    value = re.split(r'이야|이고', query.split(pattern)[1].strip())[0].strip()
-                    if column in df.columns and column not in date_conditions:
-                        conditions[column] = value
-                except IndexError:
-                    st.warning(f"질문에서 '{column}'의 값을 추출할 수 없습니다.")
-        
+        string_patterns = {col: f"{col}는" for col in column_dict.values()}
+        for column, keyword in string_patterns.items():
+            # 정규 표현식을 사용하여 값 추출
+            pattern = rf'{keyword}\s*([^이야|이고|,]+)'
+            match = re.search(pattern, query)
+            if match:
+                value = match.group(1).strip()
+                if column in df.columns and column not in date_conditions:
+                    conditions[column] = value
+
         return conditions, date_conditions
 
     # 질문에 따른 필터링 함수
     def filter_dataframe(query, df):
-        patterns = {col: f"{col}는" for col in column_dict.values()}
-        
         conditions, date_conditions = extract_conditions(query)
         
         filtered_df = df.copy()
