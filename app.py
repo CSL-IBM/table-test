@@ -18,7 +18,14 @@ try:
 
     # 파일을 pandas DataFrame으로 읽기
     file_content = io.StringIO(response.text)
-    df = pd.read_csv(file_content)
+    
+    # 파일을 DataFrame으로 읽기
+    df = pd.read_csv(
+        file_content, 
+        delimiter=',',  # 쉼표로 구분된 파일
+        error_bad_lines=False,  # 잘못된 행을 무시
+        encoding='utf-8'  # 인코딩 설정
+    )
     
     # 열 이름을 딕셔너리의 키로 사용
     column_dict = {col: col for col in df.columns}
@@ -113,3 +120,5 @@ try:
     
 except requests.exceptions.RequestException as e:
     st.error(f"파일 다운로드 중 오류가 발생했습니다: {e}")
+except pd.errors.ParserError as e:
+    st.error(f"CSV 파일을 읽는 중 오류가 발생했습니다: {e}")
