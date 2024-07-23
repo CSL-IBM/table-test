@@ -100,12 +100,14 @@ if uploaded_file is not None:
         for column, (condition_type, date_value) in date_conditions.items():
             date_value = datetime.strptime(date_value, '%Y-%m-%d')
             if column in filtered_df.columns:
+                filtered_df[column] = pd.to_datetime(filtered_df[column], errors='coerce')  # 날짜 변환
                 if condition_type == 'after':
-                    filtered_df = filtered_df[filtered_df[column].apply(pd.to_datetime, errors='coerce') > date_value]
+                    filtered_df = filtered_df[filtered_df[column] > date_value]
                 elif condition_type == 'before':
-                    filtered_df = filtered_df[filtered_df[column].apply(pd.to_datetime, errors='coerce') < date_value]
+                    filtered_df = filtered_df[filtered_df[column] < date_value]
                 elif condition_type == 'on':
-                    filtered_df = filtered_df[filtered_df[column].
+                    filtered_df = filtered_df[filtered_df[column] == date_value]
+        
         if filtered_df.empty:
             st.warning("조건에 맞는 데이터가 없습니다.")
         
