@@ -93,7 +93,11 @@ def call_watsonx_api(query, table_name, columns):
     response = llm(QUERY)
 
     # 응답을 텍스트 형식으로 파싱하여 필요한 정보를 추출
-    sql_query = response.split("Response:")[1].split("---------------------- line break")[0].strip()
+    try:
+        response_text = response.split("Response:")[1].split("---------------------- line break")[0].strip()
+    except IndexError:
+        st.error("Unexpected response format from the LLM.")
+        return ""
 
     # 가이드라인을 적용하여 SQL 쿼리 검토 및 조정
     def apply_guidelines(sql_query):
@@ -115,7 +119,7 @@ def call_watsonx_api(query, table_name, columns):
         return sql_query
 
     # 가이드라인을 적용하여 SQL 쿼리 수정
-    sql_query = apply_guidelines(sql_query)
+    sql_query = apply_guidelines(response_text)
     return sql_query
 
 def execute_sql_query(conn, query):
@@ -147,14 +151,17 @@ if uploaded_file is not None:
         columns = ', '.join(df.columns)
         response = call_watsonx_api(query, 'transactions', columns)
         
-        # SQL 질의 실행 및 결과 표시
-        filtered_df = execute_sql_query(conn, response)
-        
-        if filtered_df.empty:
-            st.warning("조건에 맞는 데이터가 없습니다.")
-        
-        st.write("필터링된 결과:")
-        st.dataframe(filtered_df)
+        if response:
+            # SQL 질의 실행 및 결과 표시
+            filtered_df = execute_sql_query(conn, response)
+            
+            if filtered_df.empty:
+                st.warning("조건에 맞는 데이터가 없습니다.")
+            
+            st.write("필터링된 결과:")
+            st.dataframe(filtered_df)
+        else:
+            st.warning("유효한 SQL 쿼리를 생성할 수 없습니다.")
         
     else:
         st.write("질문을 입력하세요.")
