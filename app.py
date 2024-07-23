@@ -28,6 +28,7 @@ if uploaded_file is not None:
     st.write(f"'{CATEGORY}는 Red 이고, {COLLECTOR}는 John이야'")
     st.write(f"'{CUSTOMER_NAME}는 Alice 이고, {INVOICE_AMOUNT}는 5000이야'")
     st.write(f"'{INVOICE_DATE}는 2024-07-01 이고, {FORECAST_CODE}는 FC2024야'")
+    st.write(f"'{CATEGORY}는 Red'")  # 단일 조건 예시
 
     query = st.text_input("질문을 입력하세요:")
 
@@ -51,11 +52,11 @@ if uploaded_file is not None:
         
         conditions = {}
         
+        # 질문에서 조건 추출
         for column, pattern in patterns.items():
             if pattern in query:
-                # 패턴에 따라 조건을 추출
                 try:
-                    # "이야"와 "이고"는 예시문에서 다를 수 있음
+                    # "이야"와 "이고"를 처리
                     value = re.split(r'이야|이고', query.split(pattern)[1].strip())[0].strip()
                     if column in df.columns:
                         conditions[column] = value
