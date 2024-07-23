@@ -27,7 +27,7 @@ if uploaded_file is not None:
     st.write("예시 질문:")
     st.write(f"'{CATEGORY}는 Red 이고, {COLLECTOR}는 John이야'")
     st.write(f"'{CUSTOMER_NAME}는 Alice 이고, {INVOICE_AMOUNT}는 5000이야'")
-    st.write(f"'{INVOICE_DATE}는 2024-07-01 이고, {FORECAST_CODE}는 FC2024야'")
+    st.write(f"'{INVOICE_DATE}는 2024-07-01 이고, {FORECAST_CODE}는 AUTO야'")
     st.write(f"'{CATEGORY}는 Red'")  # 단일 조건 예시
 
     query = st.text_input("질문을 입력하세요:")
